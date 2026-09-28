@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Point Cloud Viewer -- Scene 01</title>
+</head>
+
+<body style="margin:0; padding:24px; font-family:sans-serif;">
+
+  <h1 style="font-size:44px; line-height:1.3; margin-bottom:16px; font-weight:bold; color:rgb(17,17,17);">
+    Explore Our Point Cloud in 3D
+  </h1>
+
+  <div style="font-size:16px; margin-bottom:16px; color:rgb(9,45,76); font-weight:bold;">Scene 01</div>
+  <p style="font-size:24px; line-height:1.6; margin-bottom:32px; color:rgb(17,17,17);">
+    A point cloud captured and fused using our proprietary hardware &amp; software. <strong
+      style="color:rgb(9,45,76);">Click and drag</strong> to explore the scene in 3D.
+  </p>
+
+  <div id="pc-grid" style="display:flex; flex-wrap:wrap; justify-content:center; gap:24px; margin-bottom:32px;">
+    <div style="position:relative; width:90%; max-width:900px; min-width:300px;">
+      <canvas id="pc-1" style="width:100%; height:auto; aspect-ratio:1920/1080; display:block; border-radius:8px; background:#111;"></canvas>
+      <button id="reset-view-1" style="position:absolute; top:8px; left:8px; font-size:13px; padding:6px 12px;
+        background:rgba(0,0,0,0.65); color:#eee; border:1px solid #666; border-radius:4px; cursor:pointer;">
+        Reset View
+      </button>
+      <div data-inset="rgb" style="position:absolute; left:60.769231%; top:73.507463%; width:15.664336%; box-sizing:border-box; border:2px solid white; pointer-events:none;"><img src="rgb_inset_scene01.png" alt="RGB Image" style="display:block; width:100%; height:auto;"><div style="position:absolute; top:0; left:0; right:0; font-size:12px; text-align:center; color:white; background:rgba(0,0,0,.65);">RGB Image</div></div><div data-inset="depth" style="position:absolute; left:77.412587%; top:73.507463%; width:15.664336%; box-sizing:border-box; border:2px solid white; pointer-events:none;"><img src="depth_inset_scene01.png" alt="Color Coded Depth" style="display:block; width:100%; height:auto;"><div style="position:absolute; top:0; left:0; right:0; font-size:12px; text-align:center; color:white; background:rgba(0,0,0,.65);">Color Coded Depth</div></div><div data-inset="colorbar" style="position:absolute; left:93.020833%; top:73.507463%; width:6.979167%; box-sizing:border-box; border:0px solid white; pointer-events:none;"><img src="colorbar_inset_scene01.png" alt="" style="display:block; width:100%; height:auto;"></div>
+    </div>
+  </div>
+
+  <script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    function createCircleTexture() {
+      const size = 64;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const gradient = ctx.createRadialGradient(size / 2, size / 2, size / 2 * 0.85, size / 2, size / 2, size / 2);
+      gradient.addColorStop(0, 'rgba(255,255,255,1)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      ctx.fill();
+      const texture = new THREE.CanvasTexture(canvas);
+      return texture;
+    }
+
+    const circleTexture = createCircleTexture();
+
+    // Fixed at export time from the GUI's HTML Point scale/Near size/Far
+    // size sliders -- see this file's own generator (log._html_point_cloud_viewer).
+    // float(...) below, not a bare interpolation: Python's str() of a float
+    // always keeps a decimal point (2.0 -> "2.0"), but guard explicitly in
+    // case a caller ever passes an int -- an int here would silently become
+    // a GLSL int literal downstream (see the .toFixed(6) comment below for
+    // why that's a real shader-compile failure, not just a style nit).
+    const POINT_SCALE = 0.26387499999999997;
+    const NEAR_SIZE = 0.38;
+    const FAR_SIZE = 2.8649999999999998;
+
+    // This scene's own MP4/PNG camera shot (see this function's own
+    // docstring on camera_eye/_target/_up) -- null when not supplied,
+    // which initViewer's applyCameraView() falls back on.
+    const CAMERA_EYE = [3.6002249717712402, 0.45202547311782837, 3.2748541831970215];
+    const CAMERA_TARGET = [3.268460450988013, 0.500875320516523, 2.3327575877469586];
+    const CAMERA_UP = [0.016226016998721435, 0.9988061335460071, 0.04607628417345468];
+
+    function initViewer(canvasId, plyUrl, resetBtnId) {
+      const canvas = document.getElementById(canvasId);
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x111111);
+
+      const camera = new THREE.PerspectiveCamera(60, width / height, 0.01, 1000);
+      const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+      renderer.setSize(width, height, false);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      // Leave renderer.outputColorSpace at its default (SRGBColorSpace):
+      // three.js's own PLYLoader already calls .convertSRGBToLinear() on
+      // every vertex color it reads, so the geometry's color buffer is
+      // already linear -- the default sRGB output encoding is exactly what
+      // correctly displays it, no extra step needed here. (A previous
+      // version of this code set outputColorSpace to THREE.NoColorSpace,
+      // on the mistaken assumption the vertex colors reached the GPU
+      // un-converted -- that not only re-introduced the double-gamma bug
+      // it was meant to fix, it also crashes three@0.160.0: NoColorSpace
+      // isn't a key in three's own COLOR_SPACES table, so
+      // ColorManagement.getPrimaries() throws "Cannot read properties of
+      // undefined (reading 'primaries')" the moment a textured material
+      // -- e.g. this viewer's circleTexture point sprite -- is compiled,
+      // aborting the whole render loop while the plain <img> insets, which
+      // never touch WebGL, kept showing fine.)
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      // OrbitControls' own default (1.0) moves the camera a large fraction
+      // of its current distance-to-target on every single scroll notch --
+      // reported as "zoom is too fast" (hard to stop precisely on a point
+      // cluster without repeatedly overshooting past it). Lower, not the
+      // minDistance/near-clip floor below (those cap how CLOSE zoom can
+      // get, not how fast each notch moves).
+      controls.zoomSpeed = 0.5;
+
+      // Both set once the .ply finishes loading (below) -- null until then.
+      // diagonal is read back by applyCameraView()'s fallback fit and the
+      // pan-drift clamp in animate(); boxCenter re-origins CAMERA_EYE/
+      // _TARGET (baked in the scene's ORIGINAL, pre-geometry.center()
+      // frame) to match the recentered geometry actually on screen -- a
+      // direction like CAMERA_UP needs no such shift, only points do.
+      let diagonal = null;
+      let boxCenter = null;
+
+      // On touch, a two-finger pinch-to-zoom gesture ALSO pans (OrbitControls'
+      // default TOUCH.DOLLY_PAN maps both to the same two-finger drag) --
+      // real fingers rarely pinch perfectly symmetrically, so "just zooming
+      // in" quietly drags the target away from the point cloud too, often
+      // landing on empty space with no visual reference for where you are.
+      // Two mitigations: (1) this button, for instant recovery, and (2) the
+      // pan-drift clamp in animate() below, which stops the target from
+      // wandering arbitrarily far from the data in the first place.
+      // With no CAMERA_EYE/_TARGET (older exports, or a scene this couldn't
+      // be computed for), both the initial load and Reset View instead fall
+      // back to a generic head-on full-cloud fit -- RESET_VIEW_DIAGONAL_
+      // FACTOR/INITIAL_VIEW_DIAGONAL_FACTOR (identical by default; a caller
+      // of this generator could still differ them, e.g. Reset View jumping
+      // in closer than the initial load).
+      const RESET_VIEW_DIAGONAL_FACTOR = 1.2;
+      function applyCameraView(fallbackDiagonalFactor) {
+        if (diagonal === null) return;
+        if (CAMERA_EYE && CAMERA_TARGET) {
+          camera.position.set(CAMERA_EYE[0] - boxCenter.x, CAMERA_EYE[1] - boxCenter.y,
+                              CAMERA_EYE[2] - boxCenter.z);
+          controls.target.set(CAMERA_TARGET[0] - boxCenter.x, CAMERA_TARGET[1] - boxCenter.y,
+                              CAMERA_TARGET[2] - boxCenter.z);
+          if (CAMERA_UP) camera.up.set(CAMERA_UP[0], CAMERA_UP[1], CAMERA_UP[2]);
+        } else {
+          camera.position.set(0, 0, diagonal * fallbackDiagonalFactor);
+          controls.target.set(0, 0, 0);
+        }
+        controls.update();
+      }
+      function resetView() {
+        applyCameraView(RESET_VIEW_DIAGONAL_FACTOR);
+      }
+      const resetBtn = resetBtnId ? document.getElementById(resetBtnId) : null;
+      if (resetBtn) resetBtn.addEventListener('click', resetView);
+
+      const loader = new PLYLoader();
+      loader.load(plyUrl, function (geometry) {
+        // The saved .ply on disk has X negated once relative to this app's
+        // own live view (see log_model._export_orientation_fix's own
+        // docstring) -- that negation is meant for a "standard" external
+        // .ply viewer with the opposite screen-X convention, but this
+        // three.js viewer's plain OrbitControls camera actually needs the
+        // SAME convention the live GUI uses, not that one. Negate X back
+        // (the same corrective flip gui.py's own
+        // _undo_ply_export_orientation_fix applies when reading a saved
+        // .ply back into the live app) so this matches the RGB/depth
+        // insets instead of rendering mirrored left-right.
+        geometry.scale(-1, 1, 1);
+        geometry.computeBoundingBox();
+        const size = new THREE.Vector3();
+        geometry.boundingBox.getSize(size);
+        diagonal = size.length();   // outer-scoped -- see its own declaration above
+        // geometry.center() below re-origins everything to the bounding
+        // box's own center -- CAMERA_EYE/_TARGET are baked in THIS
+        // (pre-center) frame, so applyCameraView() needs this offset to
+        // land them on the recentered geometry actually shown on screen.
+        boxCenter = new THREE.Vector3();
+        geometry.boundingBox.getCenter(boxCenter);
+
+        // distance of each point from the sensor origin (0,0,0), captured
+        // before centering so it reflects the recorded scene, not the current
+        // orbit camera
+        const pos = geometry.attributes.position;
+        const sensorDistance = new Float32Array(pos.count);
+        let maxSensorDistance = 0;
+        for (let i = 0; i < pos.count; i++) {
+          const d = Math.sqrt(pos.getX(i) ** 2 + pos.getY(i) ** 2 + pos.getZ(i) ** 2);
+          sensorDistance[i] = d;
+          if (d > maxSensorDistance) maxSensorDistance = d;
+        }
+        for (let i = 0; i < pos.count; i++) sensorDistance[i] /= maxSensorDistance || 1;
+        geometry.setAttribute('sensorDistance', new THREE.BufferAttribute(sensorDistance, 1));
+
+        geometry.center();
+
+        const material = new THREE.PointsMaterial({
+          size: (diagonal / 300) * POINT_SCALE,
+          sizeAttenuation: true,
+          vertexColors: true,
+          map: circleTexture,
+          alphaTest: 0.5
+        });
+        // grow point size with the point's original distance from the sensor,
+        // so sparse far-away points fill in better -- independent of how close
+        // the orbit camera currently is
+        material.onBeforeCompile = function (shader) {
+          // .toFixed(6), not a bare template-literal interpolation: JS
+          // stringifies a whole number like 2.0 as "2", which GLSL parses
+          // as an int literal -- "2 * sensorDistance" (int * float) is then
+          // a shader COMPILE error (no implicit int->float conversion),
+          // which fails the whole program and renders nothing at all.
+          shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', '#include <common>\nattribute float sensorDistance;')
+            .replace('gl_PointSize = size;',
+                     `gl_PointSize = size * (${NEAR_SIZE.toFixed(6)} + ${FAR_SIZE.toFixed(6)} * sensorDistance);`);
+        };
+        const points = new THREE.Points(geometry, material);
+        scene.add(points);
+
+        // OrbitControls' scroll-wheel zoom is multiplicative (each notch
+        // scales the camera's distance-to-target by a fixed ratio, not a
+        // fixed amount) -- with no floor, the closer you already are the
+        // smaller each further notch's absolute movement gets, asymptoting
+        // toward (never quite reaching) zero. That reads as "zoom silently
+        // stops working" well before you can see individual points up
+        // close, same root cause the native GUI's own GLViewWidget zoom
+        // used to have (see src/gui.py's _ConstrainedGLViewWidget). Fix is
+        // the same: a minDistance floor scaled to THIS scene's own size,
+        // so zoom reaches a definite, comprehensible close-up limit
+        // instead of fading out. camera.near is scaled the same way (was a
+        // fixed 0.01 regardless of scene scale) so the near clipping plane
+        // itself can't start clipping close-up points before minDistance
+        // is even reached on a small-scale scene.
+        camera.near = Math.max(diagonal * 0.0001, 1e-5);
+        camera.updateProjectionMatrix();
+        controls.minDistance = diagonal * 0.0005;
+
+        // Same shot as Reset View (applyCameraView/RESET_VIEW_DIAGONAL_
+        // FACTOR above) -- the page opens on it directly instead of a
+        // separate framing.
+        const INITIAL_VIEW_DIAGONAL_FACTOR = RESET_VIEW_DIAGONAL_FACTOR;
+        applyCameraView(INITIAL_VIEW_DIAGONAL_FACTOR);
+        animate();
+      }, undefined, function (err) {
+        console.error('Failed to load ' + plyUrl, err);
+      });
+
+      function animate() {
+        requestAnimationFrame(animate);
+        // Gently pulls a drifted pan target back toward the data instead of
+        // letting it wander off into empty space forever (see resetView's
+        // own comment on why this drift happens) -- clamps the DISTANCE
+        // from the origin, not the direction, so panning within/around the
+        // point cloud itself is completely unaffected.
+        if (diagonal !== null) {
+          const maxTargetDist = diagonal * 1.5;
+          const targetDist = controls.target.length();
+          if (targetDist > maxTargetDist) {
+            controls.target.multiplyScalar(maxTargetDist / targetDist);
+          }
+        }
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      window.addEventListener('resize', function () {
+        const w = canvas.clientWidth, h = canvas.clientHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h, false);
+      });
+    }
+
+    initViewer('pc-1', 'fusion_ai_scene01.ply', 'reset-view-1');
+
+    // Keeps the Depth colorbar strip's DISPLAYED height matched to the
+    // Depth thumbnail's own actual rendered height -- the thumbnail's
+    // height is responsive (aspect-ratio against a percentage width, see
+    // _thumb_style), so a colorbar generated at one fixed pixel size would
+    // only happen to line up with it at one particular viewport width.
+    // Rescaling via CSS height (width:auto keeps the strip's own aspect
+    // ratio, so it never looks stretched) instead of regenerating the
+    // image keeps this a plain layout fix, no re-render involved.
+    function alignDepthColorbar() {
+      const depthImg = document.getElementById('depth-img-1');
+      const colorbarImg = document.getElementById('depth-colorbar-1');
+      if (!depthImg || !colorbarImg || !depthImg.clientHeight) return;
+      colorbarImg.style.height = depthImg.clientHeight + 'px';
+      colorbarImg.style.width = 'auto';
+    }
+    window.addEventListener('load', alignDepthColorbar);
+    window.addEventListener('resize', alignDepthColorbar);
+  </script>
+
+</body>
+
+</html>
