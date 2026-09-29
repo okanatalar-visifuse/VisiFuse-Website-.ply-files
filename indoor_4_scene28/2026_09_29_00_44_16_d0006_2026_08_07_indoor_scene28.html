@@ -25,7 +25,7 @@
         background:rgba(0,0,0,0.65); color:#eee; border:1px solid #666; border-radius:4px; cursor:pointer;">
         Reset View
       </button>
-      <div data-inset="rgb" style="position:absolute; left:60.769231%; top:73.507463%; width:15.664336%; box-sizing:border-box; border:2px solid white; pointer-events:none;"><img src="rgb_inset_scene28.png" alt="RGB Image" style="display:block; width:100%; height:auto;"><div style="position:absolute; top:0; left:0; right:0; font-size:12px; text-align:center; color:white; background:rgba(0,0,0,.65);">RGB Image</div></div><div data-inset="depth" style="position:absolute; left:77.412587%; top:73.507463%; width:15.664336%; box-sizing:border-box; border:2px solid white; pointer-events:none;"><img src="depth_inset_scene28.png" alt="Color Coded Depth" style="display:block; width:100%; height:auto;"><div style="position:absolute; top:0; left:0; right:0; font-size:12px; text-align:center; color:white; background:rgba(0,0,0,.65);">Color Coded Depth</div></div><div data-inset="colorbar" style="position:absolute; left:93.020833%; top:73.507463%; width:6.979167%; box-sizing:border-box; border:0px solid white; pointer-events:none;"><img src="colorbar_inset_scene28.png" alt="" style="display:block; width:100%; height:auto;"></div><div data-inset="iphone" style="position:absolute; left:69.084535%; top:17.000000%; width:15.664336%; box-sizing:border-box; border:2px solid white; pointer-events:none;"><img src="iphone_inset_scene28.png" alt="iPhone Video Capture" style="display:block; width:100%; height:auto;"><div style="position:absolute; top:0; left:0; right:0; font-size:12px; text-align:center; color:white; background:rgba(0,0,0,.65);">iPhone Video Capture</div></div>
+      <div data-inset="rgb" style="position:absolute; left:60.769231%; top:73.507463%; width:15.664336%; box-sizing:border-box; border:2px solid white; pointer-events:none;"><img src="rgb_inset_scene28.png" alt="RGB Image" style="display:block; width:100%; height:auto;"><div style="position:absolute; top:0; left:0; right:0; font-size:12px; text-align:center; color:white; background:rgba(0,0,0,.65);">RGB Image</div></div><div data-inset="depth" style="position:absolute; left:77.412587%; top:73.507463%; width:15.664336%; box-sizing:border-box; border:2px solid white; pointer-events:none;"><img src="depth_inset_scene28.png" alt="Color Coded Depth" style="display:block; width:100%; height:auto;"><div style="position:absolute; top:0; left:0; right:0; font-size:12px; text-align:center; color:white; background:rgba(0,0,0,.65);">Color Coded Depth</div></div><div data-inset="colorbar" style="position:absolute; left:93.020833%; top:73.507463%; width:6.979167%; box-sizing:border-box; border:0px solid white; pointer-events:none;"><img src="colorbar_inset_scene28.png" alt="" style="display:block; width:100%; height:auto;"></div>
     </div>
   </div>
 
@@ -76,9 +76,9 @@
     // This scene's own MP4/PNG camera shot (see this function's own
     // docstring on camera_eye/_target/_up) -- null when not supplied,
     // which initViewer's applyCameraView() falls back on.
-    const CAMERA_EYE = [0.8591899988472429, 2.329973205283388, 4.397988606531932];
-    const CAMERA_TARGET = [0.7438, 0.4341, -2.2127];
-    const CAMERA_UP = [-0.0, 1.0, 0.0];
+    const CAMERA_EYE = null;
+    const CAMERA_TARGET = null;
+    const CAMERA_UP = null;
 
     function initViewer(canvasId, plyUrl, resetBtnId) {
       const canvas = document.getElementById(canvasId);
